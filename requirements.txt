@@ -1,0 +1,11 @@
+requests
+beautifulsoup4
+beautifulsoup4
+black
+docx
+ipython
+mammoth
+numpy
+openai
+pandas
+pdfservices-sdk
