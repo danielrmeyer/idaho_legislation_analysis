@@ -9,3 +9,5 @@ numpy
 openai
 pandas
 pdfservices-sdk
+ratelimit
+tenacity
