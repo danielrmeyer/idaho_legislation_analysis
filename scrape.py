@@ -4,7 +4,13 @@ import pandas as pd
 import os
 import time
 
-from tenacity import retry, stop_after_attempt, wait_fixed, RetryError, retry_if_exception_type
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_fixed,
+    RetryError,
+    retry_if_exception_type,
+)
 from datetime import datetime
 from ratelimit import limits, sleep_and_retry
 
@@ -18,7 +24,12 @@ def write_soup_to_file(soup, filename):
     with open(filename, "w", encoding="utf-8") as f:
         f.write(soup.prettify())
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(1), retry=retry_if_exception_type(requests.exceptions.RequestException))
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(1),
+    retry=retry_if_exception_type(requests.exceptions.RequestException),
+)
 @sleep_and_retry
 @limits(calls=10, period=1)
 def parse_detail_page(detail_url):
@@ -42,9 +53,13 @@ def parse_detail_page(detail_url):
 
 @sleep_and_retry
 @limits(calls=10, period=1)
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(1), retry=retry_if_exception_type(requests.exceptions.RequestException))
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(1),
+    retry=retry_if_exception_type(requests.exceptions.RequestException),
+)
 def download_pdf(url):
-    response = requests.get(url, stream=True, timeout=(3,5))
+    response = requests.get(url, stream=True, timeout=(3, 5))
     response.raise_for_status()
 
     pdf_local_path = os.path.join(dir_path, url.split("/")[-1])
@@ -77,7 +92,7 @@ def scrape_idaho_legislation(url):
 
         link_tag = cells[0].find("a")
         detail_link = link_tag["href"]
-        bill_number = detail_link.split('/')[-1]
+        bill_number = detail_link.split("/")[-1]
         bill_title = cells[1].get_text(strip=True) if len(cells) > 1 else ""
         pdf_url = f"https://legislature.idaho.gov/wp-content/uploads/sessioninfo/2025/legislation/{bill_number}.pdf"
         status = cells[3].get_text(strip=True)
