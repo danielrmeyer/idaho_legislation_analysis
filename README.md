@@ -1,26 +1,97 @@
-# Idaho Legislation Analysis Code
-The goal of this project is to scrape bills from the Idaho Legislature and use the openai api to detect constitutional issues.
+# Idaho Legislation Analysis
 
-First off create a virtualenv or otherwise install a newer version of Python (Python 3.13). Then install the dependencies with 
-`pip install -r requirements.txt` 
+This project scrapes legislative bills from the Idaho Legislature and uses the OpenAI API to detect potential constitutional issues.
 
-The first step in scraping the data is to run the script `python scrape.py`.  Upon completion this script will kick out a string 
-that is the date the data was scraped and also the directory the data is stored in.  This string will be refereed to as the "DATARUN" and should be
-set as an environment variable for the next next steps.  For example,
+---
 
-`export DATARUN=04_30_2025` if the DATARUN is 04_30_2025
+## 🔧 Setup
 
-Next you can interact with the DATARUN by running,
-`streamlit run bill_data_explorer.py`
+1. **Install Python 3.13+** and create a virtual environment (optional but recommended).
+2. **Install dependencies**:
 
-Once you have generated a datarun you can convert the downloaded pdf files into html, preserving the strike through and underlines
-necessary for interpreting these legislative documents.
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-First make sure you have set your `DATARUN` environment variable.  Second you need to fetch the adobe credentials and set two variable:
+---
+
+## 📥 Step 1: Scrape Legislative Data
+
+Run the scraper:
+
+```bash
+python scrape.py
 ```
-export PDF_SERVICES_CLIENT_ID="################################"
-export PDF_SERVICES_CLIENT_SECRET="####################################"
+
+Upon completion, the script will output a string representing the date of the scrape and the directory where the data is stored. This value is referred to as the **`DATARUN`**, and should be exported as an environment variable for use in subsequent steps. For example:
+
+```bash
+export DATARUN=04_30_2025
 ```
 
-Finally run `python pdf_to_html.py`.  This task will take a long time (hours).  The code is throttled we don't put too much
-pressure on the web resources we are hitting.
+---
+
+## 📊 Step 2: Explore Bill Data
+
+Launch the interactive explorer with Streamlit:
+
+```bash
+streamlit run bill_data_explorer.py
+```
+
+---
+
+## 📄 Step 3: Convert PDFs to HTML
+
+This step converts the downloaded PDF files into HTML while preserving formatting like strikethroughs and underlines, which are essential for interpreting legislative changes.
+
+### 🔑 Prerequisites
+
+1. Make sure the `DATARUN` environment variable is set:
+
+   ```bash
+   export DATARUN=04_30_2025
+   ```
+
+2. Set your Adobe PDF Services credentials:
+
+   ```bash
+   export PDF_SERVICES_CLIENT_ID="your_client_id_here"
+   export PDF_SERVICES_CLIENT_SECRET="your_client_secret_here"
+   ```
+
+### ▶️ Run the Conversion
+
+Start the conversion process:
+
+```bash
+python pdf_to_html.py
+```
+
+> ⚠️ **Note:** This process may take several hours. It is intentionally throttled to avoid overloading external services.
+
+---
+
+## 📁 Output
+
+All processed data is stored in a subdirectory named after the `DATARUN` value (e.g., `04_30_2025`). This enables archival and comparison of different scrape sessions over time.
+
+---
+
+## 🧠 Future Goals
+
+- Fine-tune an OpenAI or Mistral model on historical Idaho legislation
+- Automatically identify constitutional conflicts in proposed bills
+- Provide a searchable legislative history for citizens and advocacy groups
+
+---
+
+## 📝 License
+
+This project is open-source. See `LICENSE` for more information.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please open an issue or pull request with ideas or improvements.

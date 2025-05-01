@@ -1,0 +1,114 @@
+import os
+import sys
+import json
+import openai
+import pandas as pd
+
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_fixed,
+    RetryError,
+    retry_if_exception_type,
+)
+
+from ratelimit import limits, sleep_and_retry
+
+datarun = os.getenv("DATARUN")
+
+if datarun is None:
+    print("You need to set the DATARUN environment variable")
+    sys.exit(1)
+
+@limits(calls=10, period=1)
+def analyze_legislation_html(local_html_path):
+    """
+    Reads an HTML file containing proposed legislation (with <u> and <s> tags
+    indicating additions/strikeouts) and sends it to the OpenAI ChatCompletion API.
+
+    The system prompt instructs the model to:
+      - Act as a legislative analyst,
+      - Return ONLY valid JSON listing potential constitutional issues,
+      - Use <u> and <s> tags to interpret text additions or deletions.
+
+    Returns a Python object parsed from the JSON response:
+      e.g., [ { "issue": "...", "references": "..." }, ... ]
+
+    If there are no issues, the model should return [].
+    """
+
+    # 1) Read the entire HTML from file
+    with open(local_html_path, "r", encoding="utf-8") as f:
+        html_content = f.read()
+
+    system_message = """
+You are a legislative analyst. You will receive HTML text representing a proposed bill.
+Text that is being added to existing law is wrapped in <u>...</u>.
+Text that is being removed from existing law is wrapped in <s>...</s>.
+In some cases a new chapter is being added and and everything is an addition but nothing is wrapped in <u>...</u>.
+
+Your task:
+1) Identify potential constitutional issues with the proposed legislation.
+2) Return ONLY valid JSON.
+3) Do NOT include any extra text, markdown, or explanations—just the JSON.
+4) The JSON should be an array of objects, each with the following keys:
+   "issue"        (short label of the constitutional concern),
+   "references"   (constitutional provisions, e.g. "U.S. Const. amend. I"),
+   "explanation"  (a short paragraph explaining the concern).
+
+Example:
+[
+  {
+    "issue": "First Amendment concern",
+    "references": "U.S. Const. amend. I",
+    "explanation": "This portion of the bill may impinge on freedom of speech because..."
+  },
+  {
+    "issue": "Right to due process",
+    "references": "Fifth and Fourteenth Amendments",
+    "explanation": "The new section sets procedures that could violate fundamental fairness..."
+  }
+]
+
+If there are no issues, return an empty array: []
+"""
+
+    user_message = (
+        "Analyze the following HTML legislative text for possible constitutional conflicts.\n"
+        "Remember: return ONLY valid JSON with the described format.\n\n"
+        f"HTML Document:\n{html_content}"
+    )
+
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-4o",  # or "gpt-4", depending on your preference
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0,
+        )
+    except Exception as e:
+        print("Error calling OpenAI API:", e)
+        return None
+
+    reply_content = response.choices[0].message.content
+
+    try:
+        parsed_json = json.loads(reply_content)
+        return parsed_json
+    except json.JSONDecodeError:
+        # The model might occasionally not return valid JSON. You might want to handle or retry.
+        print("OpenAI returned invalid JSON:\n", reply_content)
+        return None
+
+
+df = pd.read_csv("Data/{datarun}/idaho_bills_{datarun}.csv".format(datarun=datarun))
+
+for input_pdf_path in df["local_pdf_path"]:
+    print("processing {input_pdf_path}".format(input_pdf_path=input_pdf_path))
+    input_html_path = input_pdf_path.replace(".pdf", ".html")
+    issue_data = analyze_legislation_html(input_html_path)
+    output_json_path = input_pdf_path.replace(".pdf", ".json")
+    with open(output_json_path, "w") as f:
+        json.dump(issue_data, f, indent=4)
