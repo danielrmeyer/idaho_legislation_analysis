@@ -1,5 +1,5 @@
 # Idaho Legislation Analysis Code
-The goal of this project is to scrape bills from the Idaho Legislature and use chatGPT to detect constitutional issues.
+The goal of this project is to scrape bills from the Idaho Legislature and use the openai api to detect constitutional issues.
 
 First off create a virtualenv or otherwise install a newer version of Python (Python 3.13). Then install the dependencies with 
 `pip install -r requirements.txt` 
@@ -13,3 +13,14 @@ set as an environment variable for the next next steps.  For example,
 Next you can interact with the DATARUN by running,
 `streamlit run bill_data_explorer.py`
 
+Once you have generated a datarun you can convert the downloaded pdf files into html, preserving the strike through and underlines
+necessary for interpreting these legislative documents.
+
+First make sure you have set your `DATARUN` environment variable.  Second you need to fetch the adobe credentials and set two variable:
+```
+export PDF_SERVICES_CLIENT_ID="################################"
+export PDF_SERVICES_CLIENT_SECRET="####################################"
+```
+
+Finally run `python pdf_to_html.py`.  This task will take a long time (hours).  The code is throttled we don't put too much
+pressure on the web resources we are hitting.
