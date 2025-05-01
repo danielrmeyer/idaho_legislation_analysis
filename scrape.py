@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import time
 
+
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -131,7 +132,7 @@ bill_df["local_pdf_path"] = local_pdf_paths
 
 bill_df.to_csv(
     os.path.join(
-        dir_path, "idaho_bill_{current_date}.csv".format(current_date=current_date)
+        dir_path, "idaho_bills_{current_date}.csv".format(current_date=current_date)
     ),
     index=False,
 )
