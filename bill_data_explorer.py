@@ -14,6 +14,20 @@ def load_data():
 
 df = load_data()
 
+# 2) Single‐choice selectors (All or one)
+status_options  = ["All"] + sorted(df["bill_status"].dropna().unique().tolist())
+sponsor_options = ["All"] + sorted(df["sponsor"].dropna().unique().tolist())
+
+selected_status  = st.selectbox("Filter by Status",  status_options,  index=0)
+selected_sponsor = st.selectbox("Filter by Sponsor", sponsor_options, index=0)
+
+# 3) Apply filters
+filtered = df
+if selected_status != "All":
+    filtered = filtered[filtered["bill_status"] == selected_status]
+if selected_sponsor != "All":
+    filtered = filtered[filtered["sponsor"]    == selected_sponsor]
+
 st.title("Idaho Bills by Number of Potential Constitutional Conflicts")
 
 # 2) Declare the modal dialog
@@ -23,6 +37,9 @@ def show_details(bill_number: str):
     st.header(f"{row.bill_number}: {row.bill_title}")
     st.write("**Status:**", row.bill_status)
     st.write("**Sponsor:**", row.sponsor)
+    # clickable link
+    base_url = "https://legislature.idaho.gov"
+    st.markdown(f"[View Full Text]({base_url + row.detail_link})")
     issues = row.json_data or []
     if issues:
         st.subheader("Constitutional Issues")
@@ -33,20 +50,22 @@ def show_details(bill_number: str):
     else:
         st.info("No issues analysis available.")
 
-# 3) Header row
-c1, c2, c3, c4, c5 = st.columns([1, 6, 2, 1, 1])
+# 3) Header row (now with Sponsor)
+c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 1, 1])
 c1.markdown("**Bill #**")
 c2.markdown("**Title**")
 c3.markdown("**Status**")
-c4.markdown("**Issues**")
-c5.markdown("**Action**")
+c4.markdown("**Sponsor**")
+c5.markdown("**Issues**")
+c6.markdown("**Action**")
 
-# 4) Data rows with a compact “🔍” button (no tooltip)
-for row in df.itertuples():
-    c1, c2, c3, c4, c5 = st.columns([1, 6, 2, 1, 1])
+# 4) Data rows with a compact “🔍” button
+for row in filtered.itertuples():
+    c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 1, 1])
     c1.write(row.bill_number)
     c2.write(row.bill_title)
     c3.write(row.bill_status)
-    c4.write(row.issue_count)
-    if c5.button("🔍", key=f"btn_{row.bill_number}"):
+    c4.write(row.sponsor)
+    c5.write(row.issue_count)
+    if c6.button("🔍", key=f"btn_{row.bill_number}"):
         show_details(row.bill_number)
