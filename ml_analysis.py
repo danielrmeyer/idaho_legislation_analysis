@@ -176,9 +176,33 @@ def load_json_data(pdf_path_str):
 # Apply the function to create a new column
 df["json_data"] = df["local_pdf_path"].apply(load_json_data)
 
-df.to_csv(
+none_df = df.loc[
+    df['json_data'].isna()
+].copy()
+
+# 2) DataFrame of bills with analysis (json_data is an actual list)
+issues_df = df.loc[
+    df['json_data'].apply(lambda x: isinstance(x, list))
+].copy()
+
+issues_df['issue_count'] = issues_df['json_data'].apply(len)
+none_df['issue_count'] = 0
+
+
+issues_df_sorted = issues_df.sort_values(
+    by='issue_count', ascending=False
+    ).reset_index(drop=True)
+
+issues_df_sorted.to_json(
     os.path.join(
-        directory_path, "idaho_bills_enriched_{current_date}.csv".format(current_date=datarun)
+        "Data", "idaho_bills_enriched_{datarun}.jsonl".format(datarun=datarun)
     ),
-    index=False,
+    index=False, orient='records', lines=True
+)
+
+none_df.to_json(
+    os.path.join(
+        "data", "idaho_bills_failed_{datarun}.jsonl".format(datarun=datarun)
+    ),
+    index=False, orient="records", lines=True
 )
