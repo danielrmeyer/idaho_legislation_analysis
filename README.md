@@ -31,17 +31,9 @@ export DATARUN=04_30_2025
 
 ---
 
-## 📊 Step 2: Explore Bill Data
-
-Launch the interactive explorer with Streamlit:
-
-```bash
-streamlit run bill_data_explorer.py
-```
-
 ---
 
-## 📄 Step 3: Convert PDFs to HTML
+## 📄 Step 2: Convert PDFs to HTML
 
 This step converts the downloaded PDF files into HTML while preserving formatting like strikethroughs and underlines, which are essential for interpreting legislative changes.
 
@@ -72,6 +64,41 @@ python pdf_to_html.py
 
 ---
 
+## 🧠 Step 3: Machine Learning Analysis
+
+After converting PDFs, run the ML analysis to detect constitutional conflicts using OpenAI.
+
+### 🔑 Prerequisites
+
+1. Ensure `DATARUN` is set:
+
+   ```bash
+   export DATARUN=04_30_2025
+   ```
+2. Set your OpenAI API key (obfuscated):
+
+   ```bash
+   export OPENAI_API_KEY="sk-***********************"
+   ```
+
+### ▶️ Run the Analysis
+
+```bash
+python ml_analysis.py
+```
+
+---
+
+## 🚀 Step 4: Launch Interactive Dashboard
+
+Finally, start the Streamlit app for visual exploration:
+
+```bash
+streamlit run bill_data_explorer.py
+```
+
+---
+
 ## 📁 Output
 
 All processed data is stored in a subdirectory named after the `DATARUN` value (e.g., `04_30_2025`). This enables archival and comparison of different scrape sessions over time.
@@ -80,9 +107,9 @@ All processed data is stored in a subdirectory named after the `DATARUN` value (
 
 ## 🧠 Future Goals
 
-- Fine-tune an OpenAI or Mistral model on historical Idaho legislation
-- Automatically identify constitutional conflicts in proposed bills
-- Provide a searchable legislative history for citizens and advocacy groups
+* Fine-tune an OpenAI or Mistral model on historical Idaho legislation
+* Automatically identify constitutional conflicts in proposed bills
+* Provide a searchable legislative history for citizens and advocacy groups
 
 ---
 
