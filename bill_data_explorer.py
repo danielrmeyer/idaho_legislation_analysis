@@ -4,16 +4,8 @@ import os
 from pathlib import Path
 from utils import load_data
 
-# @st.cache_data
-# def load_data():
-#     run = os.getenv("DATARUN")
-#     path = Path("Data") / f"idaho_bills_enriched_{run}.jsonl"
-#     df = pd.read_json(path, orient="records", lines=True)
-#     df["issue_count"] = df["json_data"].apply(
-#         lambda x: len(x) if isinstance(x, list) else 0
-#     )
-#     return df.sort_values("issue_count", ascending=False)
 
+datarun = os.getenv("DATARUN")
 
 df = load_data()
 
@@ -21,7 +13,7 @@ status_options = ["All"] + sorted(df["bill_status"].dropna().unique().tolist())
 sponsor_options = ["All"] + sorted(df["sponsor"].dropna().unique().tolist())
 
 st.title("Idaho Bills by Number of Potential Constitutional Conflicts")
-
+st.markdown(f"""Data scraped on `{datarun}`""")
 st.markdown("Please see status codes page for an explanation of the status codes")
 selected_status = st.selectbox("Filter by Status", status_options, index=0)
 selected_sponsor = st.selectbox("Filter by Sponsor", sponsor_options, index=0)
