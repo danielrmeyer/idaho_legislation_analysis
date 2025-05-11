@@ -11,3 +11,4 @@ pandas
 pdfservices-sdk
 ratelimit
 tenacity
+plotly

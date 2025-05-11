@@ -18,6 +18,8 @@ df = load_data()
 status_options  = ["All"] + sorted(df["bill_status"].dropna().unique().tolist())
 sponsor_options = ["All"] + sorted(df["sponsor"].dropna().unique().tolist())
 
+st.title("Idaho Bills by Number of Potential Constitutional Conflicts")
+
 selected_status  = st.selectbox("Filter by Status",  status_options,  index=0)
 selected_sponsor = st.selectbox("Filter by Sponsor", sponsor_options, index=0)
 
@@ -28,7 +30,6 @@ if selected_status != "All":
 if selected_sponsor != "All":
     filtered = filtered[filtered["sponsor"]    == selected_sponsor]
 
-st.title("Idaho Bills by Number of Potential Constitutional Conflicts")
 
 # 2) Declare the modal dialog
 @st.dialog("Bill Details", width="large")
