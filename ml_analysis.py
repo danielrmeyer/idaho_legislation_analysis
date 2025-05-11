@@ -4,7 +4,12 @@ import json
 import openai
 import pandas as pd
 from pathlib import Path
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 from openai import APIError, RateLimitError, Timeout, APIConnectionError
 from tenacity import (
     retry,
@@ -24,7 +29,7 @@ def find_null_json_files(directory):
         if filename.endswith(".json"):
             filepath = os.path.join(directory, filename)
             try:
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     content = json.load(f)
                     if content is None:
                         null_files.append(os.path.join(directory, filename))
@@ -37,7 +42,9 @@ def find_null_json_files(directory):
 
 
 @retry(
-    retry=retry_if_exception_type((RateLimitError, APIError, Timeout, APIConnectionError)),
+    retry=retry_if_exception_type(
+        (RateLimitError, APIError, Timeout, APIConnectionError)
+    ),
     wait=wait_exponential(multiplier=1, min=4, max=60),
     stop=stop_after_attempt(6),
     reraise=True,
@@ -125,6 +132,7 @@ If there are no issues, return an empty array: []
         print("OpenAI returned invalid JSON:\n", reply_content)
         return None
 
+
 datarun = os.getenv("DATARUN")
 
 if datarun is None:
@@ -147,7 +155,7 @@ directory_path = "Data/{datarun}".format(datarun=datarun)
 null_file_list = find_null_json_files(directory_path)
 print("Files with null content:", null_file_list)
 
-pdf_paths = [p.replace('.json', '.pdf') for p in null_file_list]
+pdf_paths = [p.replace(".json", ".pdf") for p in null_file_list]
 un_analyzed_df = df[df["local_pdf_path"].isin(pdf_paths)]
 
 for input_pdf_path in un_analyzed_df["local_pdf_path"]:
@@ -157,52 +165,51 @@ for input_pdf_path in un_analyzed_df["local_pdf_path"]:
     output_json_path = input_pdf_path.replace(".pdf", ".json")
     with open(output_json_path, "w") as f:
         json.dump(issue_data, f, indent=4)
-    
+
 
 null_file_list = find_null_json_files(directory_path)
 print("Files with null content:", null_file_list)
 
 
 def load_json_data(pdf_path_str):
-    json_path = Path(pdf_path_str).with_suffix('.json')
+    json_path = Path(pdf_path_str).with_suffix(".json")
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
+        with open(json_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         return None
     except json.JSONDecodeError:
         return {"error": "Invalid JSON"}
 
+
 # Apply the function to create a new column
 df["json_data"] = df["local_pdf_path"].apply(load_json_data)
 
-none_df = df.loc[
-    df['json_data'].isna()
-].copy()
+none_df = df.loc[df["json_data"].isna()].copy()
 
 # 2) DataFrame of bills with analysis (json_data is an actual list)
-issues_df = df.loc[
-    df['json_data'].apply(lambda x: isinstance(x, list))
-].copy()
+issues_df = df.loc[df["json_data"].apply(lambda x: isinstance(x, list))].copy()
 
-issues_df['issue_count'] = issues_df['json_data'].apply(len)
-none_df['issue_count'] = 0
+issues_df["issue_count"] = issues_df["json_data"].apply(len)
+none_df["issue_count"] = 0
 
 
-issues_df_sorted = issues_df.sort_values(
-    by='issue_count', ascending=False
-    ).reset_index(drop=True)
+issues_df_sorted = issues_df.sort_values(by="issue_count", ascending=False).reset_index(
+    drop=True
+)
 
 issues_df_sorted.to_json(
     os.path.join(
         "Data", "idaho_bills_enriched_{datarun}.jsonl".format(datarun=datarun)
     ),
-    index=False, orient='records', lines=True
+    index=False,
+    orient="records",
+    lines=True,
 )
 
 none_df.to_json(
-    os.path.join(
-        "data", "idaho_bills_failed_{datarun}.jsonl".format(datarun=datarun)
-    ),
-    index=False, orient="records", lines=True
+    os.path.join("data", "idaho_bills_failed_{datarun}.jsonl".format(datarun=datarun)),
+    index=False,
+    orient="records",
+    lines=True,
 )
