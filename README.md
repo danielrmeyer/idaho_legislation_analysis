@@ -97,6 +97,12 @@ Finally, start the Streamlit app for visual exploration:
 streamlit run bill_data_explorer.py
 ```
 
+### 🔗 See it Live
+
+You can explore the interactive dashboard online here:
+
+[https://danielrmeyer-idaho-legislation-analys-bill-data-explorer-qxzijs.streamlit.app/](https://danielrmeyer-idaho-legislation-analys-bill-data-explorer-qxzijs.streamlit.app/)
+
 ---
 
 ## 📁 Output
