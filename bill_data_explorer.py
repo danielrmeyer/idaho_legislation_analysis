@@ -12,9 +12,32 @@ df = load_data()
 status_options = ["All"] + sorted(df["bill_status"].dropna().unique().tolist())
 sponsor_options = ["All"] + sorted(df["sponsor"].dropna().unique().tolist())
 
-st.title("Idaho Bills by Number of Potential Constitutional Conflicts")
-st.markdown(f"""Data scraped on `{datarun}`""")
+st.title("Idaho Bills – Ranked by Potential Constitutional Issues")
+st.markdown("""
+## About This App
+
+This dashboard uses the **OpenAI API** to scan every bill in the current Idaho legislative session for potential constitutional conflicts. 
+
+- **Data Source**  
+  Bills are fetched and enriched via a scraper.
+
+- **Issue Detection**  
+  Each bill’s text is analyzed by OpenAI to surface possible issues (e.g. equal‑protection, due‑process, federal preemption).  
+
+- **Ranking**  
+  Bills are ranked by their **number of detected issues**.
+
+- **Filtering**  
+  Use the **Status** and **Sponsor** selectors to narrow the list.  
+
+- **Detail View**  
+  Click the 🔍 icon in any row to open the **Bill Details** dialog. There you’ll find:  
+  - A link to the official bill text on the Idaho Legislature website  
+  - A full list of identified issues, with references and explanations  
+
+""")
 st.markdown("Please see status codes page for an explanation of the status codes")
+st.markdown(f"""Data scraped on `{datarun}`""")
 selected_status = st.selectbox("Filter by Status", status_options, index=0)
 selected_sponsor = st.selectbox("Filter by Sponsor", sponsor_options, index=0)
 
@@ -37,7 +60,7 @@ def show_details(bill_number: str):
     st.markdown(f"[View Full Text]({base_url + row.detail_link})")
     issues = row.json_data or []
     if issues:
-        st.subheader("Constitutional Issues")
+        st.subheader("Possible Constitutional Issues")
         for i, issue in enumerate(issues, 1):
             st.markdown(f"**{i}. {issue['issue']}**")
             st.markdown(f"- **References:** {issue['references']}")
