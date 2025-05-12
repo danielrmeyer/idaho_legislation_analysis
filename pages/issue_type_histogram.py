@@ -38,6 +38,9 @@ top_n = st.slider(
 
 top_counts = issue_counts.head(top_n)
 
+top_counts = top_counts.iloc[::-1]
+
+
 # Horizontal bar chart
 fig = px.bar(
     top_counts,
