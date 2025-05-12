@@ -67,7 +67,6 @@ def analyze_legislation_html(local_html_path, model="gpt-4o"):
     If there are no issues, the model should return [].
     """
 
-    # 1) Read the entire HTML from file
     with open(local_html_path, "r", encoding="utf-8") as f:
         html_content = f.read()
 
@@ -111,7 +110,7 @@ If there are no issues, return an empty array: []
 
     try:
         response = openai.chat.completions.create(
-            model=model,  # or "gpt-4", depending on your preference
+            model=model,
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_message},
@@ -128,7 +127,6 @@ If there are no issues, return an empty array: []
         parsed_json = json.loads(reply_content)
         return parsed_json
     except json.JSONDecodeError:
-        # The model might occasionally not return valid JSON. You might want to handle or retry.
         print("OpenAI returned invalid JSON:\n", reply_content)
         return None
 
@@ -182,12 +180,10 @@ def load_json_data(pdf_path_str):
         return {"error": "Invalid JSON"}
 
 
-# Apply the function to create a new column
 df["json_data"] = df["local_pdf_path"].apply(load_json_data)
 
 none_df = df.loc[df["json_data"].isna()].copy()
 
-# 2) DataFrame of bills with analysis (json_data is an actual list)
 issues_df = df.loc[df["json_data"].apply(lambda x: isinstance(x, list))].copy()
 
 issues_df["issue_count"] = issues_df["json_data"].apply(len)

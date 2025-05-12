@@ -49,23 +49,17 @@ def pdf_to_docx(input_stream):
         input_stream=input_stream, mime_type=PDFServicesMediaType.PDF
     )
 
-    # Create parameters for the job
     export_pdf_params = ExportPDFParams(target_format=ExportPDFTargetFormat.DOCX)
 
-    # Creates a new job instance
     export_pdf_job = ExportPDFJob(
         input_asset=input_asset, export_pdf_params=export_pdf_params
     )
 
-    # Submit the job and gets the job result
     location = pdf_services.submit(export_pdf_job)
     pdf_services_response = pdf_services.get_job_result(location, ExportPDFResult)
 
-    # Get content from the resulting asset(s)
     result_asset: CloudAsset = pdf_services_response.get_result().get_asset()
     stream_asset: StreamAsset = pdf_services.get_content(result_asset)
-
-    # output_path = input_pdf_path.replace('.pdf', '.docx')
 
     return stream_asset.get_input_stream()
 
@@ -84,11 +78,9 @@ strike => s"
 """
 
     with open(docx_abs, "rb") as docx_file:
-        # Mammoth returns an object with 'value' for the raw HTML
         result = mammoth.convert_to_html(docx_file, style_map=style_map)
-        html_content = result.value  # The generated HTML as a string
+        html_content = result.value
 
-    # Write HTML to disk
     with open(html_abs, "w", encoding="utf-8") as f:
         f.write(html_content)
 
