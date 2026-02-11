@@ -1,0 +1,25 @@
+[project]
+name = "idaho-legislation-analysis"
+version = "0.1.0"
+description = "Scrapes Idaho legislative bills and uses OpenAI to detect potential constitutional issues."
+requires-python = ">=3.13"
+dependencies = [
+    "beautifulsoup4",
+    "mammoth",
+    "numpy",
+    "openai",
+    "pandas",
+    "pdf2docx>=0.5.8",
+    "plotly",
+    "python-docx",
+    "ratelimit",
+    "requests",
+    "streamlit",
+    "tenacity",
+]
+
+[dependency-groups]
+dev = [
+    "black",
+    "ipython",
+]

@@ -1,122 +1,77 @@
-import logging
-import os
-from datetime import datetime
-import mammoth
-import pandas as pd
-import sys
+"""
+Convert scraped Idaho legislation PDFs to HTML, preserving underline and
+strikethrough formatting.
 
-from adobe.pdfservices.operation.auth.service_principal_credentials import (
-    ServicePrincipalCredentials,
-)
-from adobe.pdfservices.operation.exception.exceptions import (
-    ServiceApiException,
-    ServiceUsageException,
-    SdkException,
-)
-from adobe.pdfservices.operation.io.cloud_asset import CloudAsset
-from adobe.pdfservices.operation.io.stream_asset import StreamAsset
-from adobe.pdfservices.operation.pdf_services import PDFServices
-from adobe.pdfservices.operation.pdf_services_media_type import PDFServicesMediaType
-from adobe.pdfservices.operation.pdfjobs.jobs.export_pdf_job import ExportPDFJob
-from adobe.pdfservices.operation.pdfjobs.params.export_pdf.export_pdf_params import (
-    ExportPDFParams,
-)
-from adobe.pdfservices.operation.pdfjobs.params.export_pdf.export_pdf_target_format import (
-    ExportPDFTargetFormat,
-)
-from adobe.pdfservices.operation.pdfjobs.result.export_pdf_result import ExportPDFResult
+Two-step pipeline:
+  1. PDF → DOCX using pdf2docx (local, no external API)
+  2. DOCX → HTML using Mammoth with a style map that converts
+     underline to <u> and strikethrough to <s>
 
-from ratelimit import limits, sleep_and_retry
+These tags match the conventions used by the Idaho Legislature to mark
+additions (underline) and deletions (strikethrough) in bills.  HTML
+entities (&amp; &lt; &gt; &quot;) are properly escaped by Mammoth.
 
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_fixed,
-    RetryError,
-    retry_if_exception_type,
-)
-
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(1),
-    retry=retry_if_exception_type(SdkException),
-)
-@sleep_and_retry
-@limits(calls=10, period=1)
-def pdf_to_docx(input_stream):
-    input_asset = pdf_services.upload(
-        input_stream=input_stream, mime_type=PDFServicesMediaType.PDF
-    )
-
-    export_pdf_params = ExportPDFParams(target_format=ExportPDFTargetFormat.DOCX)
-
-    export_pdf_job = ExportPDFJob(
-        input_asset=input_asset, export_pdf_params=export_pdf_params
-    )
-
-    location = pdf_services.submit(export_pdf_job)
-    pdf_services_response = pdf_services.get_job_result(location, ExportPDFResult)
-
-    result_asset: CloudAsset = pdf_services_response.get_result().get_asset()
-    stream_asset: StreamAsset = pdf_services.get_content(result_asset)
-
-    return stream_asset.get_input_stream()
-
-
-def docx_to_html_mammoth(docx_filename, html_filename):
-    """
-    Convert a .docx to .html using the Mammoth library.
-    Saves HTML result to 'html_filename'.
-    """
-
-    docx_abs = os.path.abspath(docx_filename)
-    html_abs = os.path.abspath(html_filename)
-
-    style_map = """u => u
-strike => s"
+Usage:
+    uv run python scrape.py      # writes Data/.datarun automatically
+    uv run python pdf_to_html.py
 """
 
-    with open(docx_abs, "rb") as docx_file:
+import os
+
+import mammoth
+import pandas as pd
+from pdf2docx import Converter
+
+from config import get_datarun
+
+
+def pdf_to_docx(pdf_path, docx_path):
+    """Convert a PDF file to DOCX using pdf2docx.
+
+    Preserves underline and strikethrough formatting as native DOCX runs.
+    """
+    cv = Converter(pdf_path)
+    cv.convert(docx_path)
+    cv.close()
+
+
+def docx_to_html(docx_path, html_path):
+    """Convert a DOCX file to HTML using Mammoth.
+
+    Maps underline runs to <u> tags and strikethrough runs to <s> tags.
+    Mammoth automatically escapes HTML entities in text content.
+    """
+    style_map = """u => u
+strike => s
+"""
+
+    with open(docx_path, "rb") as docx_file:
         result = mammoth.convert_to_html(docx_file, style_map=style_map)
         html_content = result.value
 
-    with open(html_abs, "w", encoding="utf-8") as f:
+    with open(html_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
-    print(f"DOCX converted to HTML successfully: {html_abs}")
 
+# ---------------------------------------------------------------------------
+# Main script
+# ---------------------------------------------------------------------------
 
-credentials = ServicePrincipalCredentials(
-    client_id=os.getenv("PDF_SERVICES_CLIENT_ID"),
-    client_secret=os.getenv("PDF_SERVICES_CLIENT_SECRET"),
-)
+if __name__ == "__main__":
+    datarun = get_datarun()
 
-datarun = os.getenv("DATARUN")
+    df = pd.read_csv(
+        "Data/{datarun}/idaho_bills_{datarun}.csv".format(datarun=datarun)
+    )
 
-if datarun is None:
-    print("You need to set the DATARUN environment variable")
-    sys.exit(1)
+    for input_pdf_path in df["local_pdf_path"]:
+        docx_path = input_pdf_path.replace(".pdf", ".docx")
+        html_path = input_pdf_path.replace(".pdf", ".html")
 
-pdf_services = PDFServices(credentials=credentials)
+        print(f"Converting {input_pdf_path} -> {docx_path}")
+        pdf_to_docx(input_pdf_path, docx_path)
 
-df = pd.read_csv("Data/{datarun}/idaho_bills_{datarun}.csv".format(datarun=datarun))
+        print(f"Converting {docx_path} -> {html_path}")
+        docx_to_html(docx_path, html_path)
 
-for input_pdf_path in df["local_pdf_path"]:
-    print(input_pdf_path)
-
-    with open(input_pdf_path, "rb") as f:
-        input_stream = f.read()
-
-    output_stream = pdf_to_docx(input_stream)
-    output_path = input_pdf_path.replace(".pdf", ".docx")
-
-    with open(output_path, "wb") as file:
-        file.write(output_stream)
-
-
-for input_pdf_path in df["local_pdf_path"]:
-    input_docx_path = input_pdf_path.replace(".pdf", ".docx")
-    print(input_docx_path)
-    output_html_path = input_pdf_path.replace(".pdf", ".html")
-    docx_to_html_mammoth(input_docx_path, output_html_path)
+        print(f"  Done: {html_path}")

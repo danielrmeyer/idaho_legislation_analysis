@@ -1,8 +1,8 @@
-# pages/issue_type_histogram.py
+"""Histogram showing the distribution of constitutional issue types across all bills."""
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import os
 from pathlib import Path
 
 from utils import load_data

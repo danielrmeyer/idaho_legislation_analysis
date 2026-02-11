@@ -1,3 +1,5 @@
+"""Reference page listing Idaho bill status codes and their meanings."""
+
 import streamlit as st
 
 st.title("Idaho Bill Status Codes Meaning")

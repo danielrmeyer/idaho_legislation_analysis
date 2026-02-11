@@ -1,30 +1,41 @@
-import os
-import sys
+"""
+Analyse Idaho legislation HTML files for potential constitutional issues
+using the OpenAI ChatCompletion API.
+
+Two-pass approach:
+  1. Analyse every bill with *gpt-4o*.
+  2. Re-analyse any bills that returned ``null`` with *gpt-4o-mini*.
+
+Produces two JSONL files in ``Data/``:
+  - ``idaho_bills_enriched_<DATARUN>.jsonl`` — bills with detected issues
+  - ``idaho_bills_failed_<DATARUN>.jsonl``   — bills where analysis failed
+
+Usage::
+
+    uv run python ml_analysis.py
+"""
+
 import json
+import os
+from pathlib import Path
+
 import openai
 import pandas as pd
-from pathlib import Path
+from openai import APIConnectionError, APIError, RateLimitError, Timeout
+from ratelimit import limits, sleep_and_retry
 from tenacity import (
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-)
-from openai import APIError, RateLimitError, Timeout, APIConnectionError
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_fixed,
-    RetryError,
-    retry_if_exception_type,
 )
 
-from ratelimit import limits, sleep_and_retry
+from config import get_datarun
 
 
 def find_null_json_files(directory):
+    """Return paths of JSON files in *directory* whose content is ``null``."""
     null_files = []
-
     for filename in os.listdir(directory):
         if filename.endswith(".json"):
             filepath = os.path.join(directory, filename)
@@ -32,12 +43,11 @@ def find_null_json_files(directory):
                 with open(filepath, "r", encoding="utf-8") as f:
                     content = json.load(f)
                     if content is None:
-                        null_files.append(os.path.join(directory, filename))
+                        null_files.append(filepath)
             except json.JSONDecodeError:
                 print(f"Invalid JSON in file: {filename}")
             except Exception as e:
                 print(f"Error reading file {filename}: {e}")
-
     return null_files
 
 
@@ -131,45 +141,8 @@ If there are no issues, return an empty array: []
         return None
 
 
-datarun = os.getenv("DATARUN")
-
-if datarun is None:
-    print("You need to set the DATARUN environment variable")
-    sys.exit(1)
-
-df = pd.read_csv("Data/{datarun}/idaho_bills_{datarun}.csv".format(datarun=datarun))
-
-for input_pdf_path in df["local_pdf_path"]:
-    print("processing {input_pdf_path}".format(input_pdf_path=input_pdf_path))
-    input_html_path = input_pdf_path.replace(".pdf", ".html")
-    issue_data = analyze_legislation_html(input_html_path)
-    output_json_path = input_pdf_path.replace(".pdf", ".json")
-    with open(output_json_path, "w") as f:
-        json.dump(issue_data, f, indent=4)
-
-
-# Find list of failed analyses
-directory_path = "Data/{datarun}".format(datarun=datarun)
-null_file_list = find_null_json_files(directory_path)
-print("Files with null content:", null_file_list)
-
-pdf_paths = [p.replace(".json", ".pdf") for p in null_file_list]
-un_analyzed_df = df[df["local_pdf_path"].isin(pdf_paths)]
-
-for input_pdf_path in un_analyzed_df["local_pdf_path"]:
-    print("processing {input_pdf_path}".format(input_pdf_path=input_pdf_path))
-    input_html_path = input_pdf_path.replace(".pdf", ".html")
-    issue_data = analyze_legislation_html(input_html_path, model="gpt-4o-mini")
-    output_json_path = input_pdf_path.replace(".pdf", ".json")
-    with open(output_json_path, "w") as f:
-        json.dump(issue_data, f, indent=4)
-
-
-null_file_list = find_null_json_files(directory_path)
-print("Files with null content:", null_file_list)
-
-
 def load_json_data(pdf_path_str):
+    """Load the JSON analysis result for a bill, keyed by its PDF path."""
     json_path = Path(pdf_path_str).with_suffix(".json")
     try:
         with open(json_path, "r", encoding="utf-8") as f:
@@ -180,32 +153,66 @@ def load_json_data(pdf_path_str):
         return {"error": "Invalid JSON"}
 
 
-df["json_data"] = df["local_pdf_path"].apply(load_json_data)
+def _analyse_bills(df, model="gpt-4o"):
+    """Run OpenAI analysis on every bill in *df* and write per-bill JSON."""
+    for input_pdf_path in df["local_pdf_path"]:
+        print(f"processing {input_pdf_path}")
+        input_html_path = input_pdf_path.replace(".pdf", ".html")
+        issue_data = analyze_legislation_html(input_html_path, model=model)
+        output_json_path = input_pdf_path.replace(".pdf", ".json")
+        with open(output_json_path, "w") as f:
+            json.dump(issue_data, f, indent=4)
 
-none_df = df.loc[df["json_data"].isna()].copy()
 
-issues_df = df.loc[df["json_data"].apply(lambda x: isinstance(x, list))].copy()
+def main():
+    """Run the full two-pass analysis pipeline and write enriched JSONL."""
+    datarun = get_datarun()
+    directory_path = f"Data/{datarun}"
 
-issues_df["issue_count"] = issues_df["json_data"].apply(len)
-none_df["issue_count"] = 0
+    df = pd.read_csv(f"{directory_path}/idaho_bills_{datarun}.csv")
+
+    # Pass 1: analyse with gpt-4o
+    _analyse_bills(df, model="gpt-4o")
+
+    # Re-analyse failures with gpt-4o-mini
+    null_file_list = find_null_json_files(directory_path)
+    print("Files with null content:", null_file_list)
+
+    pdf_paths = [p.replace(".json", ".pdf") for p in null_file_list]
+    un_analyzed_df = df[df["local_pdf_path"].isin(pdf_paths)]
+
+    _analyse_bills(un_analyzed_df, model="gpt-4o-mini")
+
+    null_file_list = find_null_json_files(directory_path)
+    print("Files with null content:", null_file_list)
+
+    # Build enriched dataset
+    df["json_data"] = df["local_pdf_path"].apply(load_json_data)
+
+    none_df = df.loc[df["json_data"].isna()].copy()
+    issues_df = df.loc[df["json_data"].apply(lambda x: isinstance(x, list))].copy()
+
+    issues_df["issue_count"] = issues_df["json_data"].apply(len)
+    none_df["issue_count"] = 0
+
+    issues_df_sorted = issues_df.sort_values(
+        by="issue_count", ascending=False,
+    ).reset_index(drop=True)
+
+    issues_df_sorted.to_json(
+        os.path.join("Data", f"idaho_bills_enriched_{datarun}.jsonl"),
+        index=False,
+        orient="records",
+        lines=True,
+    )
+
+    none_df.to_json(
+        os.path.join("Data", f"idaho_bills_failed_{datarun}.jsonl"),
+        index=False,
+        orient="records",
+        lines=True,
+    )
 
 
-issues_df_sorted = issues_df.sort_values(by="issue_count", ascending=False).reset_index(
-    drop=True
-)
-
-issues_df_sorted.to_json(
-    os.path.join(
-        "Data", "idaho_bills_enriched_{datarun}.jsonl".format(datarun=datarun)
-    ),
-    index=False,
-    orient="records",
-    lines=True,
-)
-
-none_df.to_json(
-    os.path.join("data", "idaho_bills_failed_{datarun}.jsonl".format(datarun=datarun)),
-    index=False,
-    orient="records",
-    lines=True,
-)
+if __name__ == "__main__":
+    main()

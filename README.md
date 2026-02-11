@@ -1,120 +1,167 @@
 # Idaho Legislation Analysis
 
-This project scrapes legislative bills from the Idaho Legislature and uses the OpenAI API to detect potential constitutional issues.
+This project scrapes legislative bills from the Idaho Legislature, converts
+them to HTML (preserving strikethrough/underline markup), uses the OpenAI API
+to detect potential constitutional issues, and presents results in an
+interactive Streamlit dashboard.
 
 ---
 
-## Setup
+## Prerequisites
 
-1. **Install Python 3.13+** and create a virtual environment (optional but recommended).
-2. **Install dependencies**:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
+- **[uv](https://docs.astral.sh/uv/getting-started/installation/)** — Python
+  package and project manager (installs the correct Python version for you).
+- **OpenAI API key** — required only for Step 3 (ML analysis).
 
 ---
 
-## Step 1: Scrape Legislative Data
-
-Run the scraper:
+## Quick Start
 
 ```bash
-python scrape.py
+uv sync                                    # install deps + correct Python
+uv run python scrape.py                    # step 1: scrape bills
+uv run python pdf_to_html.py              # step 2: convert PDFs → HTML
+export OPENAI_API_KEY="sk-..."            # step 3 prerequisite
+uv run python ml_analysis.py              # step 3: constitutional analysis
+uv run streamlit run bill_data_explorer.py # step 4: launch dashboard
 ```
 
-Upon completion, the script will output a string representing the date of the scrape and the directory where the data is stored. This value is referred to as the **`DATARUN`**, and should be exported as an environment variable for use in subsequent steps. For example:
+---
+
+## Pipeline Steps
+
+### Step 1 — Scrape Legislative Data
+
+```bash
+uv run python scrape.py
+```
+
+Downloads bill metadata (number, title, status, sponsor) and PDF files from
+the Idaho Legislature website into a date-stamped `Data/<DATARUN>/` directory.
+
+On completion the date string is saved to `Data/.datarun` so that subsequent
+steps can find it automatically.  Override at any time:
 
 ```bash
 export DATARUN=04_30_2025
 ```
 
----
-
----
-
-## Step 2: Convert PDFs to HTML
-
-This step converts the downloaded PDF files into HTML while preserving formatting like strikethroughs and underlines, which are essential for interpreting legislative changes.
-
-### Prerequisites
-
-1. Make sure the `DATARUN` environment variable is set:
-
-   ```bash
-   export DATARUN=04_30_2025
-   ```
-
-2. Set your Adobe PDF Services credentials:
-
-   ```bash
-   export PDF_SERVICES_CLIENT_ID="your_client_id_here"
-   export PDF_SERVICES_CLIENT_SECRET="your_client_secret_here"
-   ```
-
-### Run the Conversion
-
-Start the conversion process:
+### Step 2 — Convert PDFs to HTML
 
 ```bash
-python pdf_to_html.py
+uv run python pdf_to_html.py
 ```
 
-> **Note:** This process may take several hours. It is intentionally throttled to avoid overloading external services.
+Converts each PDF to DOCX (via `pdf2docx`) and then to HTML (via `mammoth`),
+preserving `<u>` (additions) and `<s>` (deletions) formatting used by the
+Idaho Legislature.  No external API credentials required.
 
----
-
-## Step 3: Machine Learning Analysis
-
-After converting PDFs, run the ML analysis to detect constitutional conflicts using OpenAI.
-
-### Prerequisites
-
-1. Ensure `DATARUN` is set:
-
-   ```bash
-   export DATARUN=04_30_2025
-   ```
-2. Set your OpenAI API key (obfuscated):
-
-   ```bash
-   export OPENAI_API_KEY="sk-***********************"
-   ```
-
-### Run the Analysis
+### Step 3 — ML Analysis
 
 ```bash
-python ml_analysis.py
+export OPENAI_API_KEY="sk-***********************"
+uv run python ml_analysis.py
 ```
 
----
+Sends each bill's HTML to OpenAI GPT-4o to identify potential constitutional
+issues.  Bills that fail on the first pass are retried with GPT-4o-mini.
 
-## Step 4: Launch Interactive Dashboard
+Produces two JSONL files in `Data/`:
 
-Finally, start the Streamlit app for visual exploration:
+| File | Contents |
+|------|----------|
+| `idaho_bills_enriched_<DATARUN>.jsonl` | Bills with detected issues, sorted by issue count |
+| `idaho_bills_failed_<DATARUN>.jsonl`   | Bills where analysis returned no data |
+
+### Step 4 — Interactive Dashboard
 
 ```bash
-streamlit run bill_data_explorer.py
+uv run streamlit run bill_data_explorer.py
 ```
+
+Opens a multi-page Streamlit app with:
+
+- **Main page** — bills ranked by number of constitutional issues, filterable
+  by status and sponsor, with a detail dialog for each bill.
+- **Issue-type histogram** — distribution of issue types across all bills.
+- **Sponsor histogram** — total issues grouped by sponsor.
+- **Status codes** — reference table of Idaho bill status abbreviations.
 
 ### See it Live
 
-You can explore the interactive dashboard online here:
-
+Explore the dashboard online:
 [https://danielrmeyer-idaho-legislation-analys-bill-data-explorer-qxzijs.streamlit.app/](https://danielrmeyer-idaho-legislation-analys-bill-data-explorer-qxzijs.streamlit.app/)
 
 ---
 
-## Output
+## Project Structure
 
-All processed data is stored in a subdirectory named after the `DATARUN` value (e.g., `04_30_2025`). This enables archival and comparison of different scrape sessions over time.
+```
+├── scrape.py                # Step 1 — web scraper (requests + BeautifulSoup)
+├── pdf_to_html.py           # Step 2 — PDF → DOCX → HTML conversion
+├── ml_analysis.py           # Step 3 — OpenAI constitutional analysis
+├── bill_data_explorer.py    # Step 4 — Streamlit dashboard (multipage entrypoint)
+├── pages/
+│   ├── issue_type_histogram.py
+│   ├── issues_by_sponsor_histogram.py
+│   └── status_codes.py
+├── config.py                # DATARUN resolution (env var → .datarun → auto-detect)
+├── utils.py                 # Shared data-loading helper (@st.cache_data)
+├── Data/
+│   ├── .datarun                              # auto-generated by scrape.py
+│   ├── idaho_bills_enriched_<DATARUN>.jsonl   # enriched output
+│   └── idaho_bills_failed_<DATARUN>.jsonl     # failed analyses
+├── pyproject.toml           # uv project config + dependencies
+├── uv.lock                  # deterministic lockfile
+├── .python-version          # Python 3.13
+├── .devcontainer/           # GitHub Codespaces / VS Code devcontainer
+├── copilot-instructions.md  # context for AI-assisted development
+├── .gitignore
+├── LICENSE
+└── README.md
+```
+
+---
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DATARUN` | No | Override the date string (e.g. `04_30_2025`). See resolution order below. |
+| `OPENAI_API_KEY` | Step 3 only | OpenAI API key for GPT-4o analysis. |
+
+### DATARUN Resolution Order
+
+`config.get_datarun()` resolves the active date string using three sources,
+checked in order:
+
+1. **`DATARUN` environment variable** — highest priority, useful for one-off
+   overrides or CI pipelines.
+2. **`Data/.datarun` file** — written automatically by `scrape.py` at the end
+   of a successful run.
+3. **Auto-detection from `Data/` files** — scans for
+   `idaho_bills_enriched_*.jsonl` and extracts the date from the filename.
+   When multiple files exist the most recent date wins. This allows the
+   dashboard to work out-of-the-box on a fresh clone without running the
+   scraper or setting any environment variable.
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `Could not determine DATARUN` | Run `scrape.py` first, or `export DATARUN=<date>`. |
+| `OPENAI_API_KEY` not set | Export the key before running `ml_analysis.py`. |
+| PDF conversion warnings | Safe to ignore — `pdf2docx` prints layout heuristics. |
+| Dashboard shows no data | Ensure all four pipeline steps completed successfully. |
 
 ---
 
 ## Future Goals
 
 * Fine-tune an OpenAI or Mistral model on historical Idaho legislation
-* Automatically identify constitutional conflicts in proposed bills
+* Migrate the frontend to **Django + Bootstrap** for richer interactivity
 * Provide a searchable legislative history for citizens and advocacy groups
 
 ---

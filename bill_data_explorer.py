@@ -1,11 +1,18 @@
+"""Main Streamlit dashboard — ranks Idaho bills by potential constitutional issues.
+
+This is the multipage app entrypoint.  Run with::
+
+    uv run streamlit run bill_data_explorer.py
+"""
+
 import streamlit as st
 import pandas as pd
-import os
 from pathlib import Path
 from utils import load_data
+from config import get_datarun
 
 
-datarun = os.getenv("DATARUN")
+datarun = get_datarun()
 
 df = load_data()
 
@@ -51,6 +58,7 @@ if selected_sponsor != "All":
 
 @st.dialog("Bill Details", width="large")
 def show_details(bill_number: str):
+    """Open a modal dialog showing full details and constitutional issues for a bill."""
     row = df.loc[df["bill_number"] == bill_number].iloc[0]
     st.header(f"{row.bill_number}: {row.bill_title}")
     st.write("**Status:**", row.bill_status)

@@ -1,4 +1,5 @@
-# pages/issues_by_sponsor.py
+"""Histogram showing total constitutional issues grouped by bill sponsor."""
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
