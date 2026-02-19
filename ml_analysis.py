@@ -3,8 +3,8 @@ Analyse Idaho legislation HTML files for potential constitutional issues
 using the OpenAI ChatCompletion API.
 
 Two-pass approach:
-  1. Analyse every bill with *gpt-4o*.
-  2. Re-analyse any bills that returned ``null`` with *gpt-4o-mini*.
+  1. Analyse every bill with the configured primary model.
+  2. Re-analyse any bills that returned ``null`` with the configured retry model.
 
 Produces two JSONL files in ``Data/``:
   - ``idaho_bills_enriched_<DATARUN>.jsonl`` — bills with detected issues
@@ -21,7 +21,13 @@ from pathlib import Path
 
 import openai
 import pandas as pd
-from openai import APIConnectionError, APIError, RateLimitError, Timeout
+from openai import (
+    APIConnectionError,
+    APIError,
+    BadRequestError,
+    RateLimitError,
+    Timeout,
+)
 from ratelimit import limits, sleep_and_retry
 from tenacity import (
     retry,
@@ -31,6 +37,29 @@ from tenacity import (
 )
 
 from config import get_datarun
+
+PRIMARY_MODEL = os.getenv("OPENAI_PRIMARY_MODEL", "gpt-5.1")
+RETRY_MODEL = os.getenv("OPENAI_RETRY_MODEL", "gpt-5-mini")
+# High-context fallback for context-length failures.
+LONG_CONTEXT_MODEL = os.getenv("OPENAI_LONG_CONTEXT_MODEL", "gpt-4.1-mini")
+
+
+def _supports_explicit_temperature(model_name):
+    """Return True when the model supports explicitly setting temperature=0."""
+    name = (model_name or "").strip().lower()
+    # GPT-5 chat models require default temperature.
+    return not name.startswith("gpt-5")
+
+
+def _chat_completion(model, messages):
+    """Call chat completions with model-specific parameter compatibility."""
+    kwargs = {
+        "model": model,
+        "messages": messages,
+    }
+    if _supports_explicit_temperature(model):
+        kwargs["temperature"] = 0
+    return openai.chat.completions.create(**kwargs)
 
 
 def find_null_json_files(directory):
@@ -61,7 +90,7 @@ def find_null_json_files(directory):
 )
 @sleep_and_retry
 @limits(calls=10, period=1)
-def analyze_legislation_html(local_html_path, model="gpt-4o"):
+def analyze_legislation_html(local_html_path, model=PRIMARY_MODEL):
     """
     Reads an HTML file containing proposed legislation (with <u> and <s> tags
     indicating additions/strikeouts) and sends it to the OpenAI ChatCompletion API.
@@ -117,16 +146,41 @@ If there are no issues, return an empty array: []
         "Remember: return ONLY valid JSON with the described format.\n\n"
         f"HTML Document:\n{html_content}"
     )
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": user_message},
+    ]
 
     try:
-        response = openai.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0,
+        response = _chat_completion(model=model, messages=messages)
+    except RateLimitError as e:
+        err_text = str(e).lower()
+        if "insufficient_quota" in err_text or "exceeded your current quota" in err_text:
+            raise SystemExit(
+                "OpenAI quota exceeded. Top up billing/credits and rerun ml_analysis.py."
+            )
+        raise
+    except BadRequestError as e:
+        # Keep strongest model first; only fall back when input is too large.
+        err_text = str(e).lower()
+        is_context_error = (
+            "context_length_exceeded" in err_text
+            or "maximum context length" in err_text
+            or "too many tokens" in err_text
         )
+        if is_context_error and LONG_CONTEXT_MODEL and model != LONG_CONTEXT_MODEL:
+            print(
+                f"Context length exceeded for {local_html_path} on {model}; "
+                f"retrying with {LONG_CONTEXT_MODEL}."
+            )
+            try:
+                response = _chat_completion(model=LONG_CONTEXT_MODEL, messages=messages)
+            except Exception as fallback_error:
+                print("Error calling OpenAI API after context fallback:", fallback_error)
+                return None
+        else:
+            print("Error calling OpenAI API:", e)
+            return None
     except Exception as e:
         print("Error calling OpenAI API:", e)
         return None
@@ -153,7 +207,7 @@ def load_json_data(pdf_path_str):
         return {"error": "Invalid JSON"}
 
 
-def _analyse_bills(df, model="gpt-4o"):
+def _analyse_bills(df, model):
     """Run OpenAI analysis on every bill in *df* and write per-bill JSON."""
     for input_pdf_path in df["local_pdf_path"]:
         print(f"processing {input_pdf_path}")
@@ -171,17 +225,23 @@ def main():
 
     df = pd.read_csv(f"{directory_path}/idaho_bills_{datarun}.csv")
 
-    # Pass 1: analyse with gpt-4o
-    _analyse_bills(df, model="gpt-4o")
+    print(
+        f"Pass 1 model: {PRIMARY_MODEL} | "
+        f"Pass 2 model: {RETRY_MODEL} | "
+        f"Context fallback model: {LONG_CONTEXT_MODEL}"
+    )
 
-    # Re-analyse failures with gpt-4o-mini
+    # Pass 1: analyze with strongest model first.
+    _analyse_bills(df, model=PRIMARY_MODEL)
+
+    # Re-analyze failures with a lower-cost backup model.
     null_file_list = find_null_json_files(directory_path)
     print("Files with null content:", null_file_list)
 
     pdf_paths = [p.replace(".json", ".pdf") for p in null_file_list]
     un_analyzed_df = df[df["local_pdf_path"].isin(pdf_paths)]
 
-    _analyse_bills(un_analyzed_df, model="gpt-4o-mini")
+    _analyse_bills(un_analyzed_df, model=RETRY_MODEL)
 
     null_file_list = find_null_json_files(directory_path)
     print("Files with null content:", null_file_list)

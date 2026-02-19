@@ -18,6 +18,11 @@ dependencies = [
     "tenacity",
 ]
 
+[project.optional-dependencies]
+adobe = [
+    "pdfservices-sdk",
+]
+
 [dependency-groups]
 dev = [
     "black",

@@ -52,9 +52,35 @@ export DATARUN=04_30_2025
 uv run python pdf_to_html.py
 ```
 
-Converts each PDF to DOCX (via `pdf2docx`) and then to HTML (via `mammoth`),
-preserving `<u>` (additions) and `<s>` (deletions) formatting used by the
-Idaho Legislature.  No external API credentials required.
+Converts each PDF to DOCX and then to HTML (via `mammoth`), preserving
+`<u>` (additions) and `<s>` (deletions) formatting used by the Idaho
+Legislature.
+
+Supported conversion modes:
+
+- `pdf2docx` (default, local conversion)
+- `adobe` (Adobe PDF Services API)
+
+Select mode with:
+
+```bash
+export PDF_CONVERSION_MODE=pdf2docx   # default
+# or
+export PDF_CONVERSION_MODE=adobe
+```
+
+If using Adobe mode, set credentials first:
+
+```bash
+export PDF_SERVICES_CLIENT_ID="your_client_id"
+export PDF_SERVICES_CLIENT_SECRET="your_client_secret"
+```
+
+And ensure Adobe SDK is installed in your environment:
+
+```bash
+uv sync --extra adobe
+```
 
 ### Step 3 — ML Analysis
 
@@ -128,6 +154,9 @@ Explore the dashboard online:
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `DATARUN` | No | Override the date string (e.g. `04_30_2025`). See resolution order below. |
+| `PDF_CONVERSION_MODE` | No | PDF converter for Step 2: `pdf2docx` (default) or `adobe`. |
+| `PDF_SERVICES_CLIENT_ID` | Adobe mode only | Adobe PDF Services client ID. |
+| `PDF_SERVICES_CLIENT_SECRET` | Adobe mode only | Adobe PDF Services client secret. |
 | `OPENAI_API_KEY` | Step 3 only | OpenAI API key for GPT-4o analysis. |
 
 ### DATARUN Resolution Order
@@ -152,6 +181,7 @@ checked in order:
 | Problem | Solution |
 |---------|----------|
 | `Could not determine DATARUN` | Run `scrape.py` first, or `export DATARUN=<date>`. |
+| Adobe mode errors in Step 2 | Install `pdfservices-sdk` and set `PDF_SERVICES_CLIENT_ID` + `PDF_SERVICES_CLIENT_SECRET`. |
 | `OPENAI_API_KEY` not set | Export the key before running `ml_analysis.py`. |
 | PDF conversion warnings | Safe to ignore — `pdf2docx` prints layout heuristics. |
 | Dashboard shows no data | Ensure all four pipeline steps completed successfully. |
